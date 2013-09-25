@@ -53,10 +53,10 @@ function __autoload($class) {
     require_once $class.'.class.php';
 }
 */
+// load explicitly rather than autoload
+// so that define's from SIP are available
 require_once('SIP.class.php');
 require_once('Asterisk.class.php');
-
-//print_r(Asterisk::GetReleases());
 
 $test_sequence=array(
     array(ULAW,ALAW,GSM,G729),
@@ -77,7 +77,44 @@ $test_sequence=array(
     array(                  ),
 );
 
-VersionTest('1.8.20.1');
+$all_versions=Asterisk::GetReleases();
+/*
+$last_versions=array();
+foreach ($all_versions as $version)
+{
+    $versplit=explode('.',$version);
+    if ($versplit[0]==0) continue;
+    if ($versplit[0]==1 && $versplit[1]<4) continue;
+    $majorminor=$versplit[0].'.'.$versplit[1];
+    $last_versions[$majorminor]=$version;
+}
+
+$test0=array(ULAW,ALAW,GSM,G729);
+$test1=$test0;
+$test2=$test0;
+
+foreach ($last_versions as $version)
+                CodecTest($version,$test0,$test1,$test2,'no');
+
+*/
+
+// reject versions prior to 1.4 as non-compile-able
+$sane_versions=array();
+foreach ($all_versions as $version)
+{
+    $versplit=explode('.',$version);
+    if ($versplit[0]==0) continue;
+    if ($versplit[0]==1 && $versplit[1]<4) continue;
+    $sane_versions[]=$version;
+}
+
+foreach ($sane_versions as $version)
+    VersionTest($version);
+
+
+
+
+//VersionTest('1.8.20.1');
 
 /**
  * Perform entire sequence of tests specific version
@@ -152,7 +189,7 @@ function CodecTest($version,$codecs,$codecs1,$codecs2,$direct)
         $directmedia='canreinvite';
 
     $ast=new Asterisk($version);
-    echo 'Download... ';
+    echo 'Download '.$version.' ... ';
     $ast->download();
     echo 'Build... ';
     $ast->build();
@@ -242,7 +279,7 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
 
     $result=false;
 
-    $timeout=5;
+    $timeout=8;
     while ($timeout--)
     {
         $msg=$sip1->read();
@@ -267,7 +304,7 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
     sleep(1);
     echo "Stopping...\n";
 
-    $ast->command('core stop now');
+    $ast->stop();
 
     if (!$result)
         throw new Exception('Did not receive callee INVITE');

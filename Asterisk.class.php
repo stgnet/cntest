@@ -30,6 +30,14 @@ class Asterisk
     {
         $this->exec('sudo asterisk -rx "'.$cli.'"');
     }
+    public function stop()
+    {
+        $majorminor=substr($this->version,0,3);
+        if ($majorminor=='1.4' || $majorminor=='1.2' || $majorminor=='1.0')
+            $this->command('stop now');
+        else
+            $this->command('core stop now');
+    }
     public function start()
     {
         /*
@@ -44,6 +52,9 @@ class Asterisk
     {
         if (!empty($GLOBALS['asterisk_installed']) && $GLOBALS['asterisk_installed']==$this->version)
             return;
+
+        // if changing versions (or unsure), delete modules directory
+        $this->exec('sudo rm -rf /usr/lib/asterisk/modules');
 
         if (!$this->srcdir)
             throw new Exception('call build() first');
