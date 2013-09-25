@@ -47,27 +47,119 @@ This testing is currently 100% ignoring video codecs
 
 */
 
+
+/*
 function __autoload($class) {
     require_once $class.'.class.php';
 }
+*/
+require_once('SIP.class.php');
+require_once('Asterisk.class.php');
 
 //print_r(Asterisk::GetReleases());
 
+$test_sequence=array(
+    array(ULAW,ALAW,GSM,G729),
+    array(ULAW,ALAW,GSM     ),
+    array(ULAW,ALAW,    G729),
+    array(ULAW,ALAW,        ),
+    array(ULAW,     GSM,G729),
+    array(ULAW,     GSM     ),
+    array(ULAW,         G729),
+    array(ULAW,             ),
+    array(     ALAW,GSM,G729),
+    array(     ALAW,GSM     ),
+    array(     ALAW,    G729),
+    array(     ALAW,        ),
+    array(          GSM,G729),
+    array(          GSM     ),
+    array(              G729),
+    array(                  ),
+);
+
+VersionTest('1.8.20.1');
+
 /**
+ * Perform entire sequence of tests specific version
+*/
+function VersionTest($version)
+{
+    global $test_sequence;
+
+    foreach ($test_sequence as $test0)
+    {
+        foreach ($test_sequence as $test1)
+        {
+            foreach ($test_sequence as $test2)
+            {
+                CodecTest($version,$test0,$test1,$test2,'yes');
+                CodecTest($version,$test0,$test1,$test2,'no');
+            }
+        }
+    }
+}
+
+/**
+ * Perform single codec test
  * $version = any release or svn branch
- * $call = codec array to initiate call with
- * $allow1 = codec array that caller sip.conf allows
- * $allow2 = codec array that callee sip.conf allows
+ * $codecs = codec array to initiate call with
+ * $codecs1 = codec array that caller sip.conf allows
+ * $codecs2 = codec array that callee sip.conf allows
  * $direct = setting of directrtpsetup 'yes' or 'no'
  *
  * returns codec array that was invite'd to callee
 */
-function CodecTest($version,$call,$allow1,$allow2,$direct)
+function CodecTest($version,$codecs,$codecs1,$codecs2,$direct)
 {
+    $astmap=array(
+        0 => 'ulaw',
+        3 => 'gsm',
+        4 => 'g723',
+        8 => 'alaw',
+        9 => 'g722',
+        15 => 'g728',
+        18 => 'g729',
+        111 => 'g726',
+    );
+
+    $allow1='';
+    foreach ($codecs1 as $code)
+    {
+        if ($code==DTMF) continue;
+        if (empty($astmap[$code]))
+            throw new Exception('Supplied codec1 not known: '.$code);
+        $allow1.='allow='.$astmap[$code]."\n";
+    }
+
+    $allow2='';
+    foreach ($codecs2 as $code)
+    {
+        if ($code==DTMF) continue;
+        if (empty($astmap[$code]))
+            throw new Exception('Supplied codec2 not known: '.$code);
+        $allow2.='allow='.$astmap[$code]."\n";
+    }
+
+    $pre162=false;
+    $versplit=explode('.',$version);
+    if ($versplit[0]==1 && $versplit[1]<6)
+        $pre162=true;
+    if ($versplit[0]==1 && $versplit[1]==6 && $versplit[2]<2)
+        $pre162=true;
+
+    $directmedia='directmedia';
+    if ($pre162)
+        $directmedia='canreinvite';
+
     $ast=new Asterisk($version);
+    echo 'Download... ';
     $ast->download();
+    echo 'Build... ';
     $ast->build();
+    echo 'Install... ';
     $ast->install();
+    echo `asterisk -V`;
+    echo 'Configure... ';
 
     $caller='3175551212@127.0.0.1';
     $callee='2565551212@127.0.0.1';
@@ -104,8 +196,8 @@ udpbindaddr=0.0.0.0
 tcpenable=no
 transport=udp
 srvlookup=no
-directmedia=yes
-directrtpsetup=no
+$directmedia=yes
+directrtpsetup=$direct
 
 [caller]
 type=friend
@@ -114,10 +206,9 @@ port={$sip1->port}
 dtmfmode=rfc2833
 nat=no
 qualify=no
-allow=ulaw
-allow=alaw
-allow=g729
-directmedia=yes
+$directmedia=yes
+disallow=all
+$allow1
 
 [callee]
 type=friend
@@ -126,10 +217,9 @@ port={$sip2->port}
 dtmfmode=rfc2833
 nat=no
 qualify=no
-allow=ulaw
-allow=alaw
-allow=g729
-directmedia=yes
+$directmedia=yes
+disallow=all
+$allow2
 ");
 
     file_put_contents('/etc/asterisk/extensions.conf',"
@@ -144,11 +234,15 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
 ");
 
 
+    echo 'Starting... ';
     $ast->start();
 
-    $sip1->Invite($callee);
+    echo "INVITE\n";
+    $sip1->Invite($callee,$codecs);
 
-    $timeout=3;
+    $result=false;
+
+    $timeout=5;
     while ($timeout--)
     {
         $msg=$sip1->read();
@@ -162,16 +256,42 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
         $msg=$sip2->read();
         if ($msg)
         {
-            echo $msg;
-            continue;
+            $result=$msg;
+            break;
         }
 
         sleep(1);
     }
     $sip1->Cancel();
 
-    sleep(3);
+    sleep(1);
+    echo "Stopping...\n";
 
     $ast->command('core stop now');
+
+    if (!$result)
+        throw new Exception('Did not receive callee INVITE');
+
+    $result_codecs=$sip2->DecodeSdp($result);
+
+    // log the results
+    $data=array();
+    $data[]=$version;
+    $data[]=date('r');
+    $data[]=$direct;
+    $data[]=implode(' ',$codecs);
+    $data[]=implode(' ',$codecs1);
+    $data[]=implode(' ',$codecs2);
+    $data[]=implode(' ',$result_codecs);
+
+    $fp=fopen('results.csv','a');
+    if (!$fp)
+        throw new Exception('Unable to append results.csv file');
+    fputcsv($fp,$data);
+    fclose($fp);
+
+echo 'Result='.implode(' ',$result_codecs)."\n";
+
+    return ($result_codecs);
 }
 

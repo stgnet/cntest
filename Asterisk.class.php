@@ -37,15 +37,20 @@ class Asterisk
             $this->exec('xterm -e sudo asterisk -vvvc </dev/null 1>&0 2>&0 &');
         else
             */
-            $this->exec('sudo asterisk -vvv </dev/null >/dev/tty 2>&1 &');
+            $this->exec('sudo asterisk -vvv </dev/null >'.$this->version.'.log 2>&1 &');
         sleep(5);
     }
     public function install()
     {
+        if (!empty($GLOBALS['asterisk_installed']) && $GLOBALS['asterisk_installed']==$this->version)
+            return;
+
         if (!$this->srcdir)
             throw new Exception('call build() first');
 
         $this->exec('sudo make install');
+
+        $GLOBALS['asterisk_installed']=$this->version;
     }
     public function build($version=null)
     {

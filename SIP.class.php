@@ -131,6 +131,13 @@ class SIP
         101 => '0-16',
     );
 
+    public static function AllCodecs()
+    {
+        $codecs=array();
+        foreach ($this->rtpmap as $code => $rtp)
+            $codecs[]=$code;
+        return($codecs);
+    }
     private function CreateSdp($codecs)
     {
         $rtp=array();
@@ -164,6 +171,30 @@ class SIP
         $sdp.='a=sendrecv'.ODOA;
 
         return($sdp);
+    }
+    public function DecodeSdp($msg)
+    {
+        $exp=explode(ODOA.ODOA,$msg);
+        if (!empty($exp[1]))
+            $msg=$exp[1];
+
+        $codecs=array();
+        $sdp=explode(ODOA,$msg);
+        foreach ($sdp as $line)
+        {
+            if (preg_match('/a=rtpmap:([0-9]*) (.*)/',$line,$match))
+            {
+                $code=$match[1];
+                if ($code==DTMF) continue;
+                $rtp=$match[2];
+                if (empty($this->rtpmap[$code]))
+                    throw new Exception('DecodeSdp: Unknown code: '.$line);
+                if ($this->rtpmap[$code]!=$rtp)
+                    throw new Exception('DecodeSdp: code='.$code.' rtp='.$rtp.' map='.$this->rtpmap[$code].' does not match: '.$line);
+                $codecs[]=$code;
+            }
+        }
+        return($codecs);
     }
     public function __construct($from)
     {
