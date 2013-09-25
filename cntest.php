@@ -148,6 +148,9 @@ function VersionTest($version)
 */
 function CodecTest($version,$codecs,$codecs1,$codecs2,$direct)
 {
+    echo 'Testing '.$version.' '.implode('-',$codecs).' '.
+        implode('-',$codecs1).' ',implode('-',$codecs2).' '.$direct."\n";
+
     $astmap=array(
         0 => 'ulaw',
         3 => 'gsm',
@@ -279,7 +282,7 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
 
     $result=false;
 
-    $timeout=8;
+    $timeout=10;
     while ($timeout--)
     {
         $msg=$sip1->read();
@@ -293,11 +296,19 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
         $msg=$sip2->read();
         if ($msg)
         {
+            $exp=explode(ODOA,$msg);
+            echo 'Message to callee: '.$exp[0]."\n";
             $result=$msg;
             break;
         }
 
+        echo '.';
         sleep(1);
+        if ($timeout==5)
+        {
+            echo 'Resending INVITE ';
+            $sip1->Invite($callee,$codecs);
+        }
     }
     $sip1->Cancel();
 
