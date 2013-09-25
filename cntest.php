@@ -282,13 +282,16 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
 
     $result=false;
 
-    $timeout=10;
+    $timeout=30;
     while ($timeout--)
     {
         $msg=$sip1->read();
         if ($msg)
         {
             $exp=explode(ODOA,$msg);
+            $exp2=explode(' ',$exp[0],3);
+            if ($exp2[1]!="100")
+                throw new Exception('Unhandled reply to caller: '.$exp[0]);
             echo 'Reply to caller: '.$exp[0]."\n";
             continue;
         }
@@ -303,12 +306,14 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
         }
 
         echo '.';
-        sleep(1);
+        usleep(100000);
+        /*
         if ($timeout==5)
         {
             echo 'Resending INVITE ';
             $sip1->Invite($callee,$codecs);
         }
+        */
     }
     $sip1->Cancel();
 
@@ -318,9 +323,15 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
     $ast->stop();
 
     if (!$result)
-        throw new Exception('Did not receive callee INVITE');
-
-    $result_codecs=$sip2->DecodeSdp($result);
+    {
+        $result_codecs=array('NO INVITE');
+        echo "ERROR: Did not receive callee INVITE\n";
+        //throw new Exception('Did not receive callee INVITE');
+    }
+    else
+    {
+        $result_codecs=$sip2->DecodeSdp($result);
+    }
 
     // log the results
     $data=array();
