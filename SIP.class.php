@@ -227,9 +227,7 @@ class SIP
         $sip.=ODOA;
         $sip.=$sdp;
 
-         echo $sip;
-
-         socket_sendto($this->sock,$sip,strlen($sip),0,$this->to_domain,5060);
+        socket_sendto($this->sock,$sip,strlen($sip),0,$this->to_domain,5060);
     }
     public function cancel()
     {

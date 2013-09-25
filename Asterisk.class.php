@@ -32,11 +32,13 @@ class Asterisk
     }
     public function start()
     {
+        /*
         if (!empty($_SERVER['DISPLAY']))
             $this->exec('xterm -e sudo asterisk -vvvc </dev/null 1>&0 2>&0 &');
         else
+            */
             $this->exec('sudo asterisk -vvv </dev/null >/dev/tty 2>&1 &');
-        sleep(3);
+        sleep(5);
     }
     public function install()
     {
