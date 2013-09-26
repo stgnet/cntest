@@ -110,6 +110,7 @@ class SIP
     private $callid;
     private $branch;
     private $tag;
+    private $totag;
     public $ip;
     public $port;
 
@@ -210,6 +211,7 @@ class SIP
         $this->ip=$ip;
         $this->port=$port;
         socket_set_nonblock($this->sock);
+        $this->totag=false;
     }
     public function read()
     {
@@ -219,6 +221,33 @@ class SIP
         $bytes=@socket_recvfrom($this->sock,$data,1024,0,$from_ip,$from_port);
         if (!$bytes) return(false);
 
+        $callid=false;
+        $exp=explode(ODOA,$data);
+        $exp2=explode(' ',$exp[0],3);
+        foreach ($exp as $line)
+        {
+            $pair=explode(': ',$line);
+            if (!strcasecmp($pair[0],"Call-ID"))
+                $callid=$pair[1];
+            if (!strcasecmp($pair[0],"To"))
+            {
+                if (preg_match('/tag=([0-9a-zA-Z.]*)/',$pair[1],$match))
+                {
+                    if (!empty($match[1]))
+                        $this->totag=$match[1];
+                }
+            }
+        }
+        if (!$callid) throw new Exception('No callid found in '.$data);
+        if ($exp2[0]=='INVITE')
+            $this->callid=$callid;
+
+        if ($this->callid!=$callid)
+        {
+            echo '*** WARNING: non-matching callid, ignoring: '.$data;
+            return(false);
+        }
+
         return($data);
     }
     private function BasicHeader($method)
@@ -227,22 +256,59 @@ class SIP
         $sip.='Via: SIP/2.0/UDP '.$this->ip.':'.$this->port.';branch='.$this->branch.ODOA;
         $sip.='Max-Forwards: 70'.ODOA;
         $sip.='From: "'.$this->from_number.'" <sip:'.$this->from.'>;tag='.$this->tag.ODOA;
-        $sip.='To: <sip:'.$this->to.'>'.ODOA;
-        $sip.='Contact: <sip:'.$this->from.':'.$this->port.'>'.ODOA;
+        $sip.='To: "'.$this->to_number.'" <sip:'.$this->to.'>';
+            if ($this->totag) $sip.=';tag='.$this->totag;
+            $sip.=ODOA;
         $sip.='Call-ID: '.$this->callid.ODOA;
         $sip.='CSeq: 102 '.$method.ODOA;
-        $sip.='User-Agent: PHP SIP'.ODOA;
-        $sip.='Date: '.date('r').ODOA;
         return($sip);
+    }
+    public function cancel_ok($msg)
+    {
+        $copy=array('from','to','call-id','cseq');
+        $sip='SIP/2.0 200 OK'.ODOA;
+        //$this->branch='z9hG4bK'.substr(md5(time()),-8);
+        $sip.='Via: SIP/2.0/UDP '.$this->ip.':'.$this->port.';branch='.$this->branch.ODOA;
+        foreach (explode(ODOA,$msg) as $line)
+        {
+            $pair=explode(': ',$line);
+            if (in_array(strtolower($pair[0]),$copy))
+                $sip.=$line.ODOA;
+        }
+        $sip.='Contact: <sip:'.$this->from.':'.$this->port.'>'.ODOA;
+        $sip.='Content-Length: 0'.ODOA;
+        $sip.=ODOA;
+
+        socket_sendto($this->sock,$sip,strlen($sip),0,'127.0.0.1',5060);
+    }
+    public function trying($msg)
+    {
+        // this is hinky - create 100 trying from invite msg
+        $copy=array('from','to','call-id','cseq');
+        $sip='SIP/2.0 100 Trying'.ODOA;
+        $this->branch='z9hG4bK'.substr(md5(time()),-8);
+        $sip.='Via: SIP/2.0/UDP '.$this->ip.':'.$this->port.';branch='.$this->branch.ODOA;
+        foreach (explode(ODOA,$msg) as $line)
+        {
+            $pair=explode(': ',$line);
+            if (in_array(strtolower($pair[0]),$copy))
+                $sip.=$line.ODOA;
+        }
+        $sip.='Contact: <sip:'.$this->from.':'.$this->port.'>'.ODOA;
+        $sip.='Content-Length: 0'.ODOA;
+        $sip.=ODOA;
+
+        socket_sendto($this->sock,$sip,strlen($sip),0,'127.0.0.1',5060);
     }
     public function invite($to,$codecs=false)
     {
         if (!$codecs)
             $codecs=array(ULAW,ALAW,DTMF);
 
-        $this->branch='z9hG4bK'.substr(md5(time()),15);
-        $this->tag=substr(md5('tag'.time()),-8);
+        $this->branch='z9hG4bK'.substr(md5(time()),-8);
+        $this->tag=substr(md5('tag'.time()),-5);
         $this->callid=md5($to.time()).'@'.$this->ip.':'.$this->port;
+        $this->totag=false;
 
         $this->to=$to;
         $split=explode('@',$to);
@@ -252,7 +318,10 @@ class SIP
         date_default_timezone_set('UTC');
         $sdp=$this->CreateSdp($codecs);
         $sip=$this->BasicHeader('INVITE');
-        $sip.='Allow: INVITE, ACK, CANCEL, OPTIONS, BYE, REFER'.ODOA;
+        $sip.='Contact: <sip:'.$this->from.':'.$this->port.'>'.ODOA;
+        $sip.='User-Agent: PHP SIP'.ODOA;
+        //$sip.='Date: '.date('r').ODOA;
+        //$sip.='Allow: INVITE, ACK, CANCEL, OPTIONS, BYE, REFER'.ODOA;
         $sip.='Content-Type: application/sdp'.ODOA;
         $sip.='Content-Length: '.strlen($sdp).ODOA;
         $sip.=ODOA;
@@ -264,6 +333,7 @@ class SIP
     {
         $sip=$this->BasicHeader('ACK');
         $sip.='Content-Length: 0'.ODOA;
+        $sip.=ODOA;
 
         socket_sendto($this->sock,$sip,strlen($sip),0,$this->to_domain,5060);
     }
@@ -272,6 +342,7 @@ class SIP
         // must have previously called invite to set up vars
         $sip=$this->BasicHeader('CANCEL');
         $sip.='Content-Length: 0'.ODOA;
+        $sip.=ODOA;
 
         socket_sendto($this->sock,$sip,strlen($sip),0,$this->to_domain,5060);
 

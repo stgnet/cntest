@@ -144,7 +144,8 @@ if (!empty($argv[1]))
     exit(0);
 }
 
-foreach ($sane_versions as $version)
+//foreach ($sane_versions as $version)
+$version='1.8.20.1';
     VersionTest($version);
 
 
@@ -319,6 +320,7 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
     echo 'Starting... ';
     $ast->start();
 
+    //$ast->command('sip set debug on');
 
     // while it's running, test all calls in the sequence
     foreach ($codec_sequence as $codecs)
@@ -333,7 +335,7 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
 
         $result=false;
 
-        $timeout=20;
+        $timeout=99;
         while ($timeout--)
         {
             $msg=$sip1->read();
@@ -341,12 +343,15 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
             {
                 $exp=explode(ODOA,$msg);
                 $exp2=explode(' ',$exp[0],3);
-                if ($exp2[1]!=100)
+                echo 'Reply to caller: '.$exp[0]."\n";
+                if ($exp2[1]>=200)
                 {
                     $result='ERROR: '.$exp2[1].' '.$exp2[2];
-                    break;
+                    echo 'ACK?..';
+                    $sip1->ack();
+                    //break;
+                    $timeout=2;
                 }
-                echo 'Reply to caller: '.$exp[0]."\n";
                 continue;
             }
     
@@ -354,7 +359,11 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
             if ($msg)
             {
                 $exp=explode(ODOA,$msg);
+                $exp2=explode(' ',$exp[0],3);
                 echo 'Message to callee: '.$exp[0]."\n";
+                if ($exp2[0]!='INVITE')
+                    throw new Exception('unhandled callee msg: '.$exp[0]);
+                $sip2->trying($msg);
                 $result=$msg;
                 break;
             }
@@ -365,7 +374,7 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
         echo 'Cancel...';
         $sip1->Cancel();
 
-        $timeout=30;
+        $timeout=99;
         while ($timeout--)
         {
             $msg=$sip1->read();
@@ -373,14 +382,27 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
             {
                 $exp=explode(ODOA,$msg);
                 $exp2=explode(' ',$exp[0],3);
-                if ($exp2[1]==487) $sip1->ack();
                 echo 'Cleanup to caller: '.$exp[0]."\n";
+                $timeout=100;
+                if ($exp2[1]==488) throw new Exception('unhandled 488');
+                if ($exp2[1]>=400) {
+                    echo 'ACK...';
+                    $sip1->ack();
+                }
+                if ($exp2[1]==200) $timeout=2;
+                if ($exp2[1]==481) $timeout=2;
             }
             $msg=$sip2->read();
             if ($msg)
             {
                 $exp=explode(ODOA,$msg);
+                $exp2=explode(' ',$exp[0],3);
                 echo 'Cleanup to callee: '.$exp[0]."\n";
+                if ($exp2[0]=='CANCEL') {
+                    echo 'ok...';
+                    $sip1->cancel_ok($msg);
+                    $timeout=10;
+                }
             }
             echo '.';
             usleep(100000);
@@ -392,7 +414,6 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
         if (substr($result,0,6)=='ERROR:')
         {
             $result_codecs=array($result);
-            echo $result."\n";
         }
         else
         {
