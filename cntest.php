@@ -59,52 +59,52 @@ require_once('SIP.class.php');
 require_once('Asterisk.class.php');
 
 $test_sequence=array(
-    array(ULAW,ALAW,GSM ,G729,),
-    array(ALAW,GSM ,G729,ULAW,),
-    array(GSM ,G729,ULAW,ALAW,),
-    array(G729,ULAW,ALAW,GSM ,),
+    array(ULAW,ALAW,GSM ,G729),
+    array(ALAW,GSM ,G729,ULAW),
+    array(GSM ,G729,ULAW,ALAW),
+    array(G729,ULAW,ALAW,GSM ),
 
-    array(ULAW,ALAW,GSM      ,),
-    array(ALAW,GSM      ,ULAW,),
-    array(GSM      ,ULAW,ALAW,),
+    array(ULAW,ALAW,GSM      ),
+    array(ALAW,GSM      ,ULAW),
+    array(GSM      ,ULAW,ALAW),
 
-    array(ULAW,ALAW,     G729,),
-    array(ALAW,     G729,ULAW,),
-    array(     G729,ULAW,ALAW,),
+    array(ULAW,ALAW,     G729),
+    array(ALAW,     G729,ULAW),
+    array(     G729,ULAW,ALAW),
 
-    array(ULAW,ALAW,         ,),
-    array(ALAW,         ,ULAW,),
+    array(ULAW,ALAW,         ),
+    array(ALAW,          ULAW),
 
-    array(ULAW,     GSM ,G729,),
-    array(     GSM ,G729,ULAW,),
-    array(     G729,ULAW,GSM ,),
+    array(ULAW,     GSM ,G729),
+    array(     GSM ,G729,ULAW),
+    array(     G729,ULAW,GSM ),
 
-    array(ULAW,     GSM      ,),
-    array(     GSM      ,ULAW,),
+    array(ULAW,     GSM      ),
+    array(     GSM      ,ULAW),
     
-    array(ULAW,          G729,),
-    array(          G729,ULAW,),
+    array(ULAW,          G729),
+    array(          G729,ULAW),
 
-    array(ULAW,              ,),
+    array(ULAW,              ),
 
-    array(     ALAW,GSM ,G729,),
-    array(     GSM ,G729,ALAW,),
-    array(     G729,ALAW,GSM ,),
+    array(     ALAW,GSM ,G729),
+    array(     GSM ,G729,ALAW),
+    array(     G729,ALAW,GSM ),
 
-    array(     ALAW,GSM      ,),
-    array(     GSM      ,ALAW,),
+    array(     ALAW,GSM      ),
+    array(     GSM      ,ALAW),
 
-    array(     ALAW,     G729,),
-    array(          G729,ALAW,),
+    array(     ALAW,     G729),
+    array(          G729,ALAW),
 
-    array(     ALAW,         ,),
+    array(     ALAW,         ),
 
-    array(          GSM ,G729,),
-    array(          G729,GSM ,),
+    array(          GSM ,G729),
+    array(          G729,GSM ),
 
-    array(          GSM      ,),
-    array(               G729,),
-    array(                   ,),
+    array(          GSM      ),
+    array(               G729),
+    array(                   ),
 );
 
 $all_versions=Asterisk::GetReleases();
@@ -184,8 +184,8 @@ function VersionTest($version)
 */
 function CodecTest($version,$codecs,$codecs1,$codecs2,$direct)
 {
-    echo 'Testing '.$version.' '.implode('-',$codecs).' '.
-        implode('-',$codecs1).' ',implode('-',$codecs2).' '.$direct."\n";
+    echo 'Testing '.$version.' ('.implode(' ',$codecs).') ('.
+        implode(' ',$codecs1).') (',implode(' ',$codecs2).') '.$direct."\n";
 
     $astmap=array(
         0 => 'ulaw',
@@ -318,10 +318,11 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
 
     echo "INVITE\n";
     $sip1->Invite($callee,$codecs);
+    usleep(200000);
 
     $result=false;
 
-    $timeout=30;
+    $timeout=20;
     while ($timeout--)
     {
         $msg=$sip1->read();
@@ -329,13 +330,11 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
         {
             $exp=explode(ODOA,$msg);
             $exp2=explode(' ',$exp[0],3);
-            if ($exp2[1]==503)
+            if ($exp2[1]!=100)
             {
                 $result='ERROR: '.$exp2[1].' '.$exp2[2];
                 break;
             }
-            if ($exp2[1]!="100")
-                throw new Exception('Unhandled reply to caller: '.$exp[0]);
             echo 'Reply to caller: '.$exp[0]."\n";
             continue;
         }
@@ -351,13 +350,6 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
 
         echo '.';
         usleep(100000);
-        /*
-        if ($timeout==5)
-        {
-            echo 'Resending INVITE ';
-            $sip1->Invite($callee,$codecs);
-        }
-        */
     }
     $sip1->Cancel();
 

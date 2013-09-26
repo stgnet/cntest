@@ -46,7 +46,7 @@ class Asterisk
         else
             */
             $this->exec('sudo asterisk -vvv </dev/null >>'.$this->version.'.log 2>&1 &');
-        sleep(5);
+        sleep(1);
     }
     public function install()
     {
