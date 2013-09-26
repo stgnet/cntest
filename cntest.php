@@ -159,11 +159,17 @@ function VersionTest($version)
 {
     global $test_sequence;
 
-    foreach ($test_sequence as $test0)
+    $seq0=$test_sequence;
+    shuffle($seq0);
+    foreach ($seq0 as $test0)
     {
-        foreach ($test_sequence as $test1)
+        $seq1=$test_sequence;
+        shuffle($seq1);
+        foreach ($seq1 as $test1)
         {
-            foreach ($test_sequence as $test2)
+            $seq2=$test_sequence;
+            shuffle($seq2);
+            foreach ($seq2 as $test2)
             {
                 CodecTest($version,$test0,$test1,$test2,'yes');
                 CodecTest($version,$test0,$test1,$test2,'no');
