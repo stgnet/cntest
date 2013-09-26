@@ -260,13 +260,20 @@ class SIP
 
         socket_sendto($this->sock,$sip,strlen($sip),0,$this->to_domain,5060);
     }
+    public function ack()
+    {
+        $sip=$this->BasicHeader('ACK');
+        $sip.='Content-Length: 0'.ODOA;
+
+        socket_sendto($this->sock,$sip,strlen($sip),0,$this->to_domain,5060);
+    }
     public function cancel()
     {
         // must have previously called invite to set up vars
         $sip=$this->BasicHeader('CANCEL');
         $sip.='Content-Length: 0'.ODOA;
 
-         socket_sendto($this->sock,$sip,strlen($sip),0,$this->to_domain,5060);
+        socket_sendto($this->sock,$sip,strlen($sip),0,$this->to_domain,5060);
 
     }
 };

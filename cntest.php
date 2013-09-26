@@ -161,8 +161,8 @@ function VersionTest($version)
 
     $seq0=$test_sequence;
     shuffle($seq0);
-    foreach ($seq0 as $test0)
-    {
+//    foreach ($seq0 as $test0)
+//    {
         $seq1=$test_sequence;
         shuffle($seq1);
         foreach ($seq1 as $test1)
@@ -171,28 +171,25 @@ function VersionTest($version)
             shuffle($seq2);
             foreach ($seq2 as $test2)
             {
-                CodecTest($version,$test0,$test1,$test2,'yes');
-                CodecTest($version,$test0,$test1,$test2,'no');
+                CodecTest($version,$seq0,$test1,$test2,'yes');
+                CodecTest($version,$seq0,$test1,$test2,'no');
             }
         }
-    }
+//    }
 }
 
 /**
  * Perform single codec test
  * $version = any release or svn branch
- * $codecs = codec array to initiate call with
+ * $codecs = array of [codec array to initiate call with]
  * $codecs1 = codec array that caller sip.conf allows
  * $codecs2 = codec array that callee sip.conf allows
  * $direct = setting of directrtpsetup 'yes' or 'no'
  *
  * returns codec array that was invite'd to callee
 */
-function CodecTest($version,$codecs,$codecs1,$codecs2,$direct)
+function CodecTest($version,$codec_sequence,$codecs1,$codecs2,$direct)
 {
-    echo 'Testing '.$version.' ('.implode(' ',$codecs).') ('.
-        implode(' ',$codecs1).') (',implode(' ',$codecs2).') '.$direct."\n";
-
     $astmap=array(
         0 => 'ulaw',
         3 => 'gsm',
@@ -322,79 +319,111 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
     echo 'Starting... ';
     $ast->start();
 
-    echo "INVITE\n";
-    $sip1->Invite($callee,$codecs);
-    usleep(200000);
 
-    $result=false;
-
-    $timeout=20;
-    while ($timeout--)
+    // while it's running, test all calls in the sequence
+    foreach ($codec_sequence as $codecs)
     {
-        $msg=$sip1->read();
-        if ($msg)
+        echo 'Testing '.$version.' ('.implode(' ',$codecs).') ('.
+            implode(' ',$codecs1).') (',implode(' ',$codecs2).') '.$direct."\n";
+
+
+        echo "INVITE\n";
+        $sip1->Invite($callee,$codecs);
+        usleep(200000);
+
+        $result=false;
+
+        $timeout=20;
+        while ($timeout--)
         {
-            $exp=explode(ODOA,$msg);
-            $exp2=explode(' ',$exp[0],3);
-            if ($exp2[1]!=100)
+            $msg=$sip1->read();
+            if ($msg)
             {
-                $result='ERROR: '.$exp2[1].' '.$exp2[2];
+                $exp=explode(ODOA,$msg);
+                $exp2=explode(' ',$exp[0],3);
+                if ($exp2[1]!=100)
+                {
+                    $result='ERROR: '.$exp2[1].' '.$exp2[2];
+                    break;
+                }
+                echo 'Reply to caller: '.$exp[0]."\n";
+                continue;
+            }
+    
+            $msg=$sip2->read();
+            if ($msg)
+            {
+                $exp=explode(ODOA,$msg);
+                echo 'Message to callee: '.$exp[0]."\n";
+                $result=$msg;
                 break;
             }
-            echo 'Reply to caller: '.$exp[0]."\n";
-            continue;
+    
+            echo '.';
+            usleep(100000);
         }
+        echo 'Cancel...';
+        $sip1->Cancel();
 
-        $msg=$sip2->read();
-        if ($msg)
+        $timeout=30;
+        while ($timeout--)
         {
-            $exp=explode(ODOA,$msg);
-            echo 'Message to callee: '.$exp[0]."\n";
-            $result=$msg;
-            break;
+            $msg=$sip1->read();
+            if ($msg)
+            {
+                $exp=explode(ODOA,$msg);
+                $exp2=explode(' ',$exp[0],3);
+                if ($exp2[1]==487) $sip1->ack();
+                echo 'Cleanup to caller: '.$exp[0]."\n";
+            }
+            $msg=$sip2->read();
+            if ($msg)
+            {
+                $exp=explode(ODOA,$msg);
+                echo 'Cleanup to callee: '.$exp[0]."\n";
+            }
+            echo '.';
+            usleep(100000);
         }
-
-        echo '.';
-        usleep(100000);
+    
+        if (!$result)
+            $result='ERROR: NO INVITE';
+    
+        if (substr($result,0,6)=='ERROR:')
+        {
+            $result_codecs=array($result);
+            echo $result."\n";
+        }
+        else
+        {
+            $result_codecs=$sip2->DecodeSdp($result);
+        }
+    
+        // log the results
+        $data=array();
+        $data[]=$version;
+        $data[]=date('r');
+        $data[]=$direct;
+        $data[]=implode(' ',$codecs);
+        $data[]=implode(' ',$codecs1);
+        $data[]=implode(' ',$codecs2);
+        $data[]=implode(' ',$result_codecs);
+    
+        $fp=fopen('results.csv','a');
+        if (!$fp)
+            throw new Exception('Unable to append results.csv file');
+        fputcsv($fp,$data);
+        fclose($fp);
+    
+        echo 'Result='.implode(' ',$result_codecs)."\n";
     }
-    $sip1->Cancel();
 
     sleep(1);
     echo "Stopping...\n";
-
+    
     $ast->stop();
-
-    if (!$result)
-        $result='ERROR: NO INVITE';
-
-    if (substr($result,0,6)=='ERROR:')
-    {
-        $result_codecs=array($result);
-        echo $result."\n";
-    }
-    else
-    {
-        $result_codecs=$sip2->DecodeSdp($result);
-    }
-
-    // log the results
-    $data=array();
-    $data[]=$version;
-    $data[]=date('r');
-    $data[]=$direct;
-    $data[]=implode(' ',$codecs);
-    $data[]=implode(' ',$codecs1);
-    $data[]=implode(' ',$codecs2);
-    $data[]=implode(' ',$result_codecs);
-
-    $fp=fopen('results.csv','a');
-    if (!$fp)
-        throw new Exception('Unable to append results.csv file');
-    fputcsv($fp,$data);
-    fclose($fp);
-
-echo 'Result='.implode(' ',$result_codecs)."\n";
-
-    return ($result_codecs);
+    
+    
+//    return ($result_codecs);
 }
 
