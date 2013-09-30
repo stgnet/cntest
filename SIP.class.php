@@ -95,6 +95,7 @@ define('G722',9);
 define('G728',15);
 define('G729',18);
 define('DTMF',101);
+define('D119',119);
 define('G726',111);
 
 
@@ -123,6 +124,7 @@ class SIP
         15 => 'G728/8000',
         18 => 'G729/8000',
         101 => 'telephone-event/8000',
+        119 => 'telephone-event/8000',
         111 => 'G726-32/8000',
     );
 
@@ -130,6 +132,7 @@ class SIP
         4 => 'annexa=no',
         18 => 'annexb=no',
         101 => '0-16',
+        119 => '32-40',
     );
 
     public static function AllCodecs()
@@ -148,7 +151,7 @@ class SIP
                 throw new Exception('RTPMAP not defined for codec #'.$code);
             $rtp[$code]=$this->rtpmap[$code];
         }
-        if (empty($rtp[DTMF]))
+        if (empty($rtp[DTMF]) && empty($rtp[D119]))
             $rtp[DTMF]=$this->rtpmap[DTMF];
 
         $sdp='';
@@ -186,7 +189,7 @@ class SIP
             if (preg_match('/a=rtpmap:([0-9]*) (.*)/',$line,$match))
             {
                 $code=$match[1];
-                if ($code==DTMF) continue;
+                //if ($code==DTMF) continue;
                 $rtp=$match[2];
                 if (empty($this->rtpmap[$code]))
                     throw new Exception('DecodeSdp: Unknown code: '.$line);

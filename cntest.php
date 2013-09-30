@@ -135,6 +135,10 @@ foreach ($all_versions as $version)
     $versplit=explode('.',$version);
     if ($versplit[0]==0) continue;
     if ($versplit[0]==1 && $versplit[1]<4) continue;
+
+// temp hack - skip everything before 1.6
+if ($versplit[0]=='1' && $versplit[1]<6) continue;
+
     $sane_versions[]=$version;
 }
 
@@ -145,10 +149,23 @@ if (!empty($argv[1]))
 }
 
 //foreach ($sane_versions as $version)
-$version='1.8.20.1';
-    VersionTest($version);
+//$version='1.8.20.1';
+//    VersionTest($version);
 
+foreach ($sane_versions as $version)
+{
+    $channels=array(ALAW,ULAW,G722);
+    $call=array(ALAW,ULAW,G729,G723,G726,D119);
 
+    CodecTest($version,array($call),$channels,$channels,'yes');
+    CodecTest($version,array($call),$channels,$channels,'no');
+
+//    CodecTest($version,array($call),$channels,$channels,"no");
+
+//    CodecTest($version,array($call),$call,$call,"yes");
+//    CodecTest($version,array($call),$call,$call,"no");
+
+}
 
 
 //VersionTest('1.8.20.1');
@@ -235,11 +252,18 @@ function CodecTest($version,$codec_sequence,$codecs1,$codecs2,$direct)
     echo 'Download '.$version.' ... ';
     $ast->download();
     echo 'Build... ';
-    $ast->build();
+    try {
+        $ast->build();
+    } catch (Exception $e) {
+        echo "##### SKIPPING VERSION $version BECAUSE OF COMPILE ERROR #####\n".$e->getMessage()."\n";
+        return;
+    }
     echo 'Install... ';
     $ast->install();
     echo `asterisk -V`;
     echo 'Configure... ';
+
+    echo shell_exec('sudo cp -v /tmp/codec*.so /usr/lib/asterisk/modules');
 
     $caller='3175551212@127.0.0.1';
     $callee='2565551212@127.0.0.1';
@@ -265,7 +289,7 @@ autoload=yes
 [general]
 [logfiles]
 console => notice,warning,error
-full => notice,warning,error,verbose
+full => debug,notice,warning,error,verbose,dtmf
 ");
 
     file_put_contents('/etc/asterisk/sip.conf',"
@@ -320,7 +344,9 @@ exten => _256XXXXXXX,1,Dial(SIP/\${EXTEN}@callee)
     echo 'Starting... ';
     $ast->start();
 
-    //$ast->command('sip set debug on');
+    $ast->command('sip set debug on');
+    $ast->command('core set debug 5');
+    $ast->command('core set verbose 5');
 
     // while it's running, test all calls in the sequence
     foreach ($codec_sequence as $codecs)

@@ -131,6 +131,6 @@ class Asterisk
             $page=file_get_contents('http://downloads.asterisk.org/pub/telephony/asterisk/releases');
 
             preg_match_all('/href="asterisk-([0-9.]*).tar.gz/',$page,$matches);
-            return($matches[1]);
+            return(array_unique($matches[1]));
     }
 };
