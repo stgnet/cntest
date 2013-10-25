@@ -144,7 +144,8 @@ if ($versplit[0]=='1' && $versplit[1]<6) continue;
 
 if (!empty($argv[1]))
 {
-    VersionTest($argv[1]);
+    //VersionTest($argv[1]);
+	d119_test($argv[1]);
     exit(0);
 }
 
@@ -153,6 +154,9 @@ if (!empty($argv[1]))
 //    VersionTest($version);
 
 foreach ($sane_versions as $version)
+	d119_test($version);
+
+function d119_test($version)
 {
     $channels=array(ALAW,ULAW,G722);
     $call=array(ALAW,ULAW,G729,G723,G726,D119);

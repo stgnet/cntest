@@ -122,6 +122,11 @@ class Asterisk
         }
         else
         {
+			if (is_dir($this->version))
+			{
+				$this->srcdir=$this->version;
+				return;
+			}
             // pull current code from svn
             throw new Exception('not implemented '.$this->version);
         }
